@@ -8,19 +8,9 @@
 #include "utils/hex.hpp"
 #include "utils/pe.hpp"
 
+#include <algorithm>
 #include <cctype>
-
-#ifdef _MSC_VER
-#    include <algorithm>
-#    include <functional>
-#    define search                          std::search
-#    define boyer_moore_horspool_searcher   std::boyer_moore_horspool_searcher
-#else
-#    include <experimental/algorithm>
-#    include <experimental/functional>
-#    define search                          std::experimental::search
-#    define boyer_moore_horspool_searcher   std::experimental::make_boyer_moore_horspool_searcher
-#endif
+#include <functional>
 
 #include "pdbparser.hpp"
 namespace pdb = retdec::pdbparser;
@@ -86,7 +76,7 @@ namespace
     }
 
     constexpr uint8_t rsds_magic[] = {'R', 'S', 'D', 'S'};
-    const auto rsds_pattern        = boyer_moore_horspool_searcher(std::begin(rsds_magic), std::end(rsds_magic));
+    const auto rsds_pattern        = std::boyer_moore_horspool_searcher(std::begin(rsds_magic), std::end(rsds_magic));
 
     opt<PdbCtx> read_pdb(const void* vsrc, size_t src_size)
     {
@@ -94,17 +84,17 @@ namespace
         const auto end = &src[src_size];
         while(true)
         {
-            const auto rsds = search(&src[0], &src[src_size], rsds_pattern);
+            const auto rsds = std::search(&src[0], &src[src_size], rsds_pattern);
             if(rsds == &src[src_size])
-                return FAIL(ext::nullopt, "unable to find RSDS pattern into kernel module");
+                return FAIL(std::nullopt, "unable to find RSDS pattern into kernel module");
 
             const auto size = std::distance(rsds, &src[src_size]);
             if(size < 4 /*magic*/ + 16 /*guid*/ + 4 /*age*/ + 2 /*name*/)
-                return FAIL(ext::nullopt, "kernel module is too small for pdb header");
+                return FAIL(std::nullopt, "kernel module is too small for pdb header");
 
             const auto name_end = reinterpret_cast<const uint8_t*>(memchr(&rsds[4 + 16 + 4], 0x00, size));
             if(!name_end)
-                return FAIL(ext::nullopt, "missing null-terminating byte on PDB header module name");
+                return FAIL(std::nullopt, "missing null-terminating byte on PDB header module name");
 
             uint8_t guid[16];
             write_be32(&guid[0], read_le32(&rsds[4 + 0])); // Data1

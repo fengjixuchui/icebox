@@ -17,7 +17,7 @@ get_filename_component(bin_dir      ${root_dir}/bin/${ARCH}    ABSOLUTE)
 
 find_package(PythonLibs 3 REQUIRED)
 
-if(NOT MSVC)
+if(NOT WIN32)
     add_compile_options(
         -Wno-unused-local-typedefs
         -fPIC
@@ -241,6 +241,9 @@ target_include_directories(icebox_py PRIVATE
 )
 if(WIN32)
     set_target_properties(icebox_py PROPERTIES SUFFIX ".pyd")
+endif()
+if(PYTHON_LIBS)
+    set(PYTHON_LIBRARIES ${PYTHON_LIBS})
 endif()
 target_link_libraries(icebox_py PRIVATE
     icebox

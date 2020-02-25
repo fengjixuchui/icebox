@@ -126,9 +126,6 @@ VOID
 *
 */
 
-#define DEBUG 0
-
-
 #if DEBUG
 #define ddprintf(fmt, ...) dprintf(fmt, __VA_ARGS__)
 #else
@@ -284,12 +281,6 @@ FDP_Access getAccessType(char *flags)
 DECLARE_API(hbmsr)
 {
     ULONG64 BreakpointAddress = 0;
-    PCSTR Remainder = NULL;
-
-    //ULONG Bytes;
-    ULONG Data = 0;
-    HANDLE hOutputFile = NULL;
-
     char myArgs[1024];
     char *argList[10];
     int argc = 0;
@@ -361,12 +352,6 @@ Fail:
 DECLARE_API(hba)
 {
     ULONG64 BreakpointAddress = 0;
-    PCSTR Remainder = NULL;
-
-    //ULONG Bytes;
-    ULONG Data = 0;
-    HANDLE hOutputFile = NULL;
-
     char myArgs[1024];
     char *argList[10];
     int argc = 0;
@@ -510,6 +495,7 @@ DECLARE_API(save)
     CloseHandle(hFile);
     hFile = INVALID_HANDLE_VALUE;
     HRESULT Hr = pDebugControl->lpVtbl->Execute(pDebugControl, DEBUG_OUTCTL_ALL_CLIENTS, Command, DEBUG_EXECUTE_NOT_LOGGED);
+    (void) Hr;
 
 Fail:
     if (hFile != INVALID_HANDLE_VALUE){
@@ -530,6 +516,7 @@ DECLARE_API(refresh)
     char Fake[1];
     ReadMemory(0xDEADCACABABEFACE, Fake, 1, &ulMemoryRead);
     HRESULT Hr = pDebugControl->lpVtbl->Execute(pDebugControl, DEBUG_OUTCTL_ALL_CLIENTS, "t", DEBUG_EXECUTE_NOT_LOGGED);
+    (void) Hr;
 
 Fail:
     return;
@@ -594,6 +581,7 @@ DECLARE_API(restore)
     CloseHandle(hFile);
     hFile = INVALID_HANDLE_VALUE;
     HRESULT Hr = pDebugControl->lpVtbl->Execute(pDebugControl, DEBUG_OUTCTL_ALL_CLIENTS, Command, DEBUG_EXECUTE_NOT_LOGGED);
+    (void) Hr;
     
 Fail:
     if (hFile != INVALID_HANDLE_VALUE){
@@ -636,10 +624,6 @@ DECLARE_API(hbc)
     ULONG64 BreakpointId;
     PCSTR Remainder;
 
-    //ULONG Bytes;
-    ULONG Data = 0;
-    HANDLE hOutputFile = NULL;
-
     if (!pFDP){
         dprintf("Not connected to debuggee !\n");
         goto Fail;
@@ -668,13 +652,7 @@ Fail:
 //!hbint 0x0E 0x00 Cr2
 DECLARE_API(hbint)
 {
-    ULONG64 BreakpointAddress = 0;
     PCSTR Remainder = NULL;
-
-    //ULONG Bytes;
-    ULONG Data = 0;
-    HANDLE hOutputFile = NULL;
-
     char myArgs[1024];
     char *argList[10];
     int argc = 0;
