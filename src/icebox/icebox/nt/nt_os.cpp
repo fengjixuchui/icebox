@@ -81,8 +81,17 @@ namespace
         return true;
     }
 
+    constexpr uint8_t inst_retn = 0xc3;
+
     opt<mod_t> wait_for_ntdll(nt::Os& os, core::Core& core)
     {
+        const auto csrss = process::find_name(core, "csrss.exe", flags::x64);
+        if(csrss)
+        {
+            process::join(core, *csrss, mode_e::kernel);
+            return modules::find_name(core, *csrss, "ntdll.dll", flags::x64);
+        }
+
         const auto sysret_exit = os.symbols_[KiKernelSysretExit] ? *os.symbols_[KiKernelSysretExit] : registers::read_msr(core, msr_e::lstar);
         auto ntdll             = opt<mod_t>{};
         auto breakpoints       = std::vector<state::Breakpoint>{};
@@ -107,14 +116,41 @@ namespace
                 if(!proc_name)
                     return;
 
-                // for some reason, smss contain ntdll but is not readable
-                if(*proc_name == "smss.exe")
-                    return;
-
-                ntdll = modules::find_name(core, *proc, "ntdll.dll", flags::x64);
+                if(*proc_name == "csrss.exe")
+                {
+                    ntdll = modules::find_name(core, *proc, "ntdll.dll", flags::x64);
+                }
             });
             rips.insert(ret_addr);
             breakpoints.emplace_back(ret_bp);
+        });
+        // disable paging files
+        const auto ntCreatePagingFile    = symbols::address(core, symbols::kernel, "nt", "NtCreatePagingFile");
+        const auto bp_ntCreatePagingFile = state::break_on(core, "NtCreatePagingFile", *ntCreatePagingFile, [&]
+        {
+            auto proc = process::current(core);
+            if(!proc)
+                return;
+
+            auto name = process::name(core, *proc);
+            if(!name)
+                return;
+
+            LOG(INFO, "%s NtCreatePagingFile", name->c_str());
+            auto rip    = registers::read(core, reg_e::rip);
+            auto buffer = std::vector<uint8_t>(1024);
+            auto ok     = os.io_.read_all(&buffer[0], *ntCreatePagingFile, buffer.size());
+            if(!ok)
+                return;
+
+            for(size_t i = 0; i < buffer.size(); ++i)
+                if(buffer[i] == inst_retn)
+                {
+                    rip += i;
+                    registers::write(core, reg_e::rip, rip);
+                    registers::write(core, reg_e::rax, 0); // force STATUS_SUCCESS
+                    break;
+                }
         });
         while(!ntdll)
             state::exec(core);
@@ -224,6 +260,31 @@ namespace
                 return {};
         }
     }
+
+    bool force_winpe_mode(core::Core& core, memory::Io& io)
+    {
+        const auto InitWinPEModeType = symbols::address(core, symbols::kernel, "nt", "InitWinPEModeType");
+        if(!InitWinPEModeType)
+            return false;
+
+        const auto mode_type = io.le32(*InitWinPEModeType);
+        if(!mode_type)
+            return false;
+
+        constexpr auto INIT_WINPEMODE_INRAM = 0x80000000;
+        if(*mode_type & INIT_WINPEMODE_INRAM)
+        {
+            LOG(INFO, "ram-only mode detected");
+            return true;
+        }
+
+        const auto ok = io.write_le32(*InitWinPEModeType, *mode_type | INIT_WINPEMODE_INRAM);
+        if(!ok)
+            FAIL(false, "unable to set the global InitWinPEModeType to INIT_WINPEMODE_INRAM");
+
+        LOG(INFO, "ram-only mode enabled");
+        return true;
+    }
 }
 
 bool nt::Os::setup()
@@ -290,6 +351,11 @@ bool nt::Os::setup()
         return false;
 
     init_nt_mmu(*this);
+
+    ok = force_winpe_mode(core_, io_);
+    if(!ok)
+        return false;
+
     LOG(WARNING, "kernel: kpcr:0x%" PRIx64 " kdtb:0x%" PRIx64 " version:%d.%d", kpcr_, io_.dtb.val, NtMajorVersion_, NtMinorVersion_);
     return try_load_ntdll(*this, core_);
 }
